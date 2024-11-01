@@ -12,6 +12,7 @@ export function CodeComparisonToolComponent() {
   const [leftContent, setLeftContent] = useState('')
   const [rightContent, setRightContent] = useState('')
   const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({})
+  const [hasError, setHasError] = useState(false)
   const { 
     fontSize, 
     wrapLines, 
@@ -20,40 +21,93 @@ export function CodeComparisonToolComponent() {
     isLiveEdit 
   } = useSettings()
 
-  const handleLeftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLeftContent(e.target.value)
+  // Reset error state when content changes
+  useEffect(() => {
+    setHasError(false)
+  }, [leftContent, rightContent])
+
+  // Safe content update functions
+  const updateLeftContent = (newContent: string) => {
+    try {
+      setLeftContent(newContent)
+      setHasError(false)
+    } catch (error) {
+      console.error('Error updating left content:', error)
+      toast.error('Error processing content')
+      setHasError(true)
+    }
   }
 
-  const handleRightChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setRightContent(e.target.value)
+  const updateRightContent = (newContent: string) => {
+    try {
+      setRightContent(newContent)
+      setHasError(false)
+    } catch (error) {
+      console.error('Error updating right content:', error)
+      toast.error('Error processing content')
+      setHasError(true)
+    }
   }
 
+  // Update the handlePaste function
+  const handlePaste = async (side: 'left' | 'right') => {
+    try {
+      let pastedText = ''
+
+      if (navigator.clipboard && window.isSecureContext) {
+        pastedText = await navigator.clipboard.readText()
+      } else {
+        const textArea = document.createElement('textarea')
+        document.body.appendChild(textArea)
+        textArea.focus()
+        try {
+          document.execCommand('paste')
+          pastedText = textArea.value
+        } catch {
+          toast.error('Please use Ctrl+V/Cmd+V to paste')
+        }
+        document.body.removeChild(textArea)
+      }
+
+      if (pastedText) {
+        if (side === 'left') {
+          updateLeftContent(pastedText)
+        } else {
+          updateRightContent(pastedText)
+        }
+        toast.success('Content pasted successfully')
+      } else {
+        toast.error('No content in clipboard')
+      }
+    } catch {
+      console.error('Paste failed')
+      toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
+    }
+  }
+
+  // Update the differences calculation with better error handling
   const differences = useMemo(() => {
     try {
       if (!leftContent || !rightContent) return []
 
-      // Normalize line endings and handle potential null/undefined
       const normalizeText = (text: string = '') => {
         try {
-          return text.replace(/\r\n/g, '\n')
-        } catch (e) {
-          console.error('Normalization error:', e)
+          return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        } catch {
           return text
         }
       }
-        
+
       let leftText = normalizeText(leftContent)
       let rightText = normalizeText(rightContent)
 
-      // Safe text processing
       if (ignoreWhitespace) {
         const trimLines = (text: string) => {
           try {
             return text.split('\n')
               .map(line => line?.trim() || '')
               .join('\n')
-          } catch (e) {
-            console.error('Trim error:', e)
+          } catch {
             return text
           }
         }
@@ -66,30 +120,59 @@ export function CodeComparisonToolComponent() {
         rightText = rightText.toLowerCase()
       }
 
-      // Safe diff calculation
-      try {
-        const diffResult = diff.diffLines(leftText, rightText, {
-          ignoreWhitespace,
-          ignoreCase,
-          newlineIsToken: true,
-        })
-
-        return diffResult.map(part => ({
-          ...part,
-          value: part.value?.replace(/\n$/, '') || '',
-          lines: part.value?.split('\n') || [''],
-        }))
-      } catch (diffError) {
-        console.error('Diff calculation error:', diffError)
-        return []
-      }
-
+      return diff.diffLines(leftText, rightText, {
+        ignoreWhitespace,
+        ignoreCase,
+        newlineIsToken: true,
+      }).map(part => ({
+        ...part,
+        value: part.value?.replace(/\n$/, '') || '',
+        lines: part.value?.split('\n') || [''],
+      }))
     } catch (error) {
-      console.error('General diff error:', error)
-      toast.error('Error comparing texts. Please check your input.')
+      console.error('Diff calculation error:', error)
       return []
     }
   }, [leftContent, rightContent, ignoreWhitespace, ignoreCase])
+
+  // Add error recovery UI
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
+        <div className="text-center p-4">
+          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+          <p className="mb-4 text-gray-400">There was an error processing the code comparison</p>
+          <div className="space-x-4">
+            <button 
+              onClick={() => {
+                setLeftContent('')
+                setRightContent('')
+                setHasError(false)
+              }}
+              className="px-4 py-2 bg-[#2d2d5b] rounded-md hover:bg-[#3d3d6b] transition-colors"
+            >
+              Clear All
+            </button>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-[#5e3fde] rounded-md hover:bg-[#4e35b5] transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Update the textarea onChange handlers
+  const handleLeftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    updateLeftContent(e.target.value)
+  }
+
+  const handleRightChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    updateRightContent(e.target.value)
+  }
 
   // Update the diff count calculation
   const diffCount = useMemo(() => {
@@ -136,44 +219,6 @@ export function CodeComparisonToolComponent() {
     } catch {
       console.error('Copy failed')
       toast.error('Unable to copy automatically. Please try selecting the text manually')
-    }
-  }
-
-  // Improved paste functionality
-  const handlePaste = async (side: 'left' | 'right') => {
-    try {
-      let pastedText = ''
-
-      // First try the modern clipboard API
-      if (navigator.clipboard && window.isSecureContext) {
-        pastedText = await navigator.clipboard.readText()
-      } else {
-        // Fallback for older browsers or non-HTTPS
-        const textArea = document.createElement('textarea')
-        document.body.appendChild(textArea)
-        textArea.focus()
-        try {
-          document.execCommand('paste')
-          pastedText = textArea.value
-        } catch {
-          toast.error('Please use Ctrl+V/Cmd+V to paste')
-        }
-        document.body.removeChild(textArea)
-      }
-
-      if (pastedText) {
-        if (side === 'left') {
-          setLeftContent(pastedText)
-        } else {
-          setRightContent(pastedText)
-        }
-        toast.success('Content pasted successfully')
-      } else {
-        toast.error('No content in clipboard')
-      }
-    } catch {
-      console.error('Paste failed')
-      toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
     }
   }
 
@@ -365,36 +410,6 @@ export function CodeComparisonToolComponent() {
     focus:outline-none focus:ring-2 focus:ring-[#5e3fde]/50
     disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none
   `
-
-  // Add error boundary for the entire component
-  const [hasError, setHasError] = useState(false)
-
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('Global error:', event.error)
-      setHasError(true)
-      toast.error('An error occurred. Please try refreshing the page.')
-    }
-
-    window.addEventListener('error', handleError)
-    return () => window.removeEventListener('error', handleError)
-  }, [])
-
-  if (hasError) {
-    return (
-      <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-[#5e3fde] rounded-md hover:bg-[#4e35b5]"
-          >
-            Refresh Page
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-[#0B0B1E] text-white flex flex-col">
