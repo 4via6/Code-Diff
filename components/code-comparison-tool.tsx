@@ -13,83 +13,18 @@ export function CodeComparisonToolComponent() {
   const [rightContent, setRightContent] = useState('')
   const [copyStatus, setCopyStatus] = useState<{ [key: string]: boolean }>({})
   const [hasError, setHasError] = useState(false)
-  const { 
-    fontSize, 
-    wrapLines, 
-    ignoreWhitespace, 
-    ignoreCase,
-    isLiveEdit 
-  } = useSettings()
+  const { fontSize, wrapLines, ignoreWhitespace, ignoreCase } = useSettings()
 
-  // Reset error state when content changes
+  // Move useEffect outside of conditional
   useEffect(() => {
     setHasError(false)
   }, [leftContent, rightContent])
 
-  // Safe content update functions
-  const updateLeftContent = (newContent: string) => {
-    try {
-      setLeftContent(newContent)
-      setHasError(false)
-    } catch (error) {
-      console.error('Error updating left content:', error)
-      toast.error('Error processing content')
-      setHasError(true)
-    }
-  }
-
-  const updateRightContent = (newContent: string) => {
-    try {
-      setRightContent(newContent)
-      setHasError(false)
-    } catch (error) {
-      console.error('Error updating right content:', error)
-      toast.error('Error processing content')
-      setHasError(true)
-    }
-  }
-
-  // Update the handlePaste function
-  const handlePaste = async (side: 'left' | 'right') => {
-    try {
-      let pastedText = ''
-
-      if (navigator.clipboard && window.isSecureContext) {
-        pastedText = await navigator.clipboard.readText()
-      } else {
-        const textArea = document.createElement('textarea')
-        document.body.appendChild(textArea)
-        textArea.focus()
-        try {
-          document.execCommand('paste')
-          pastedText = textArea.value
-        } catch {
-          toast.error('Please use Ctrl+V/Cmd+V to paste')
-        }
-        document.body.removeChild(textArea)
-      }
-
-      if (pastedText) {
-        if (side === 'left') {
-          updateLeftContent(pastedText)
-        } else {
-          updateRightContent(pastedText)
-        }
-        toast.success('Content pasted successfully')
-      } else {
-        toast.error('No content in clipboard')
-      }
-    } catch {
-      console.error('Paste failed')
-      toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
-    }
-  }
-
-  // Update the differences calculation with better error handling
+  // Move useMemo outside of conditional
   const differences = useMemo(() => {
-    try {
-      if (!leftContent || !rightContent) return []
+    if (hasError || !leftContent || !rightContent) return []
 
+    try {
       const normalizeText = (text: string = '') => {
         try {
           return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -133,9 +68,31 @@ export function CodeComparisonToolComponent() {
       console.error('Diff calculation error:', error)
       return []
     }
-  }, [leftContent, rightContent, ignoreWhitespace, ignoreCase])
+  }, [leftContent, rightContent, ignoreWhitespace, ignoreCase, hasError])
 
-  // Add error recovery UI
+  const handleLeftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    try {
+      setLeftContent(e.target.value)
+      setHasError(false)
+    } catch (error) {
+      console.error('Error updating left content:', error)
+      toast.error('Error processing content')
+      setHasError(true)
+    }
+  }
+
+  const handleRightChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    try {
+      setRightContent(e.target.value)
+      setHasError(false)
+    } catch (error) {
+      console.error('Error updating right content:', error)
+      toast.error('Error processing content')
+      setHasError(true)
+    }
+  }
+
+  // Render error state
   if (hasError) {
     return (
       <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
@@ -165,24 +122,41 @@ export function CodeComparisonToolComponent() {
     )
   }
 
-  // Update the textarea onChange handlers
-  const handleLeftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateLeftContent(e.target.value)
-  }
+  // Update the handlePaste function
+  const handlePaste = async (side: 'left' | 'right') => {
+    try {
+      let pastedText = ''
 
-  const handleRightChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateRightContent(e.target.value)
-  }
-
-  // Update the diff count calculation
-  const diffCount = useMemo(() => {
-    return differences.reduce((count, part) => {
-      if (part.added || part.removed) {
-        return count + part.lines.length
+      if (navigator.clipboard && window.isSecureContext) {
+        pastedText = await navigator.clipboard.readText()
+      } else {
+        const textArea = document.createElement('textarea')
+        document.body.appendChild(textArea)
+        textArea.focus()
+        try {
+          document.execCommand('paste')
+          pastedText = textArea.value
+        } catch {
+          toast.error('Please use Ctrl+V/Cmd+V to paste')
+        }
+        document.body.removeChild(textArea)
       }
-      return count
-    }, 0)
-  }, [differences])
+
+      if (pastedText) {
+        if (side === 'left') {
+          handleLeftChange(pastedText)
+        } else {
+          handleRightChange(pastedText)
+        }
+        toast.success('Content pasted successfully')
+      } else {
+        toast.error('No content in clipboard')
+      }
+    } catch {
+      console.error('Paste failed')
+      toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
+    }
+  }
 
   // Improved copy functionality
   const handleCopyDiff = async (content: string, side: 'left' | 'right') => {
