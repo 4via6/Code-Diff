@@ -32,5 +32,3 @@ spec:
             port: 3000
           initialDelaySeconds: 15
           periodSeconds: 10
-      imagePullSecrets:
-      - name: my-registry-secret

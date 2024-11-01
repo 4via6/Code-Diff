@@ -32,18 +32,31 @@ export function CodeComparisonToolComponent() {
     try {
       if (!leftContent || !rightContent) return []
 
-      // Normalize line endings
-      const normalizeText = (text: string) => text.replace(/\r\n/g, '\n')
-      
+      // Normalize line endings and handle potential null/undefined
+      const normalizeText = (text: string = '') => {
+        try {
+          return text.replace(/\r\n/g, '\n')
+        } catch (e) {
+          console.error('Normalization error:', e)
+          return text
+        }
+      }
+        
       let leftText = normalizeText(leftContent)
       let rightText = normalizeText(rightContent)
 
-      // Pre-process based on settings
+      // Safe text processing
       if (ignoreWhitespace) {
-        const trimLines = (text: string) => 
-          text.split('\n')
-            .map(line => line.trim())
-            .join('\n')
+        const trimLines = (text: string) => {
+          try {
+            return text.split('\n')
+              .map(line => line?.trim() || '')
+              .join('\n')
+          } catch (e) {
+            console.error('Trim error:', e)
+            return text
+          }
+        }
         leftText = trimLines(leftText)
         rightText = trimLines(rightText)
       }
@@ -53,21 +66,27 @@ export function CodeComparisonToolComponent() {
         rightText = rightText.toLowerCase()
       }
 
-      const diffResult = diff.diffLines(leftText, rightText, {
-        ignoreWhitespace,
-        ignoreCase,
-        newlineIsToken: true,
-      })
+      // Safe diff calculation
+      try {
+        const diffResult = diff.diffLines(leftText, rightText, {
+          ignoreWhitespace,
+          ignoreCase,
+          newlineIsToken: true,
+        })
 
-      // Process the diff result to handle empty lines and improve accuracy
-      return diffResult.map(part => ({
-        ...part,
-        value: part.value.replace(/\n$/, ''),
-        lines: part.value.split('\n'),
-      }))
+        return diffResult.map(part => ({
+          ...part,
+          value: part.value?.replace(/\n$/, '') || '',
+          lines: part.value?.split('\n') || [''],
+        }))
+      } catch (diffError) {
+        console.error('Diff calculation error:', diffError)
+        return []
+      }
 
     } catch (error) {
-      console.error('Diff calculation error:', error)
+      console.error('General diff error:', error)
+      toast.error('Error comparing texts. Please check your input.')
       return []
     }
   }, [leftContent, rightContent, ignoreWhitespace, ignoreCase])
@@ -90,37 +109,72 @@ export function CodeComparisonToolComponent() {
     }
 
     try {
-      await navigator.clipboard.writeText(content)
-      setCopyStatus(prev => ({ ...prev, [side]: true }))
-      toast.success('Content copied to clipboard')
+      // First try the modern clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content)
+        setCopyStatus(prev => ({ ...prev, [side]: true }))
+        toast.success('Content copied to clipboard')
+      } else {
+        // Fallback for older browsers or non-HTTPS
+        const textArea = document.createElement('textarea')
+        textArea.value = content
+        document.body.appendChild(textArea)
+        textArea.select()
+        try {
+          document.execCommand('copy')
+          setCopyStatus(prev => ({ ...prev, [side]: true }))
+          toast.success('Content copied to clipboard')
+        } catch (err) {
+          toast.error('Failed to copy. Please use Ctrl+C/Cmd+C')
+        }
+        document.body.removeChild(textArea)
+      }
       
       setTimeout(() => {
         setCopyStatus(prev => ({ ...prev, [side]: false }))
       }, 2000)
     } catch (err) {
       console.error('Copy failed:', err)
-      toast.error('Failed to copy. Try selecting and copying manually')
+      // More user-friendly error message
+      toast.error('Unable to copy automatically. Please try selecting the text manually')
     }
   }
 
   // Improved paste functionality
   const handlePaste = async (side: 'left' | 'right') => {
     try {
-      const text = await navigator.clipboard.readText()
-      if (!text) {
-        toast.error('Clipboard is empty')
-        return
+      let pastedText = ''
+
+      // First try the modern clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
+        pastedText = await navigator.clipboard.readText()
+      } else {
+        // Fallback for older browsers or non-HTTPS
+        const textArea = document.createElement('textarea')
+        document.body.appendChild(textArea)
+        textArea.focus()
+        try {
+          document.execCommand('paste')
+          pastedText = textArea.value
+        } catch (err) {
+          toast.error('Please use Ctrl+V/Cmd+V to paste')
+        }
+        document.body.removeChild(textArea)
       }
 
-      if (side === 'left') {
-        setLeftContent(text)
+      if (pastedText) {
+        if (side === 'left') {
+          setLeftContent(pastedText)
+        } else {
+          setRightContent(pastedText)
+        }
+        toast.success('Content pasted successfully')
       } else {
-        setRightContent(text)
+        toast.error('No content in clipboard')
       }
-      toast.success('Content pasted successfully')
     } catch (err) {
       console.error('Paste failed:', err)
-      toast.error('Failed to paste. Please try manually pasting')
+      toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
     }
   }
 
@@ -155,26 +209,93 @@ export function CodeComparisonToolComponent() {
     return {}
   }
 
-  // Add this effect to initialize highlight.js
+  // Update the highlight.js initialization
   useEffect(() => {
-    hljs.highlightAll()
+    try {
+      if (leftContent || rightContent) {
+        setTimeout(() => {
+          hljs.highlightAll()
+        }, 0)
+      }
+    } catch (error) {
+      console.error('Highlight error:', error)
+    }
   }, [leftContent, rightContent])
 
-  // Update the renderDiff function's live edit mode
+  // Update the renderDiff function with error boundary
   const renderDiff = (content: string, side: 'left' | 'right') => {
-    const lines = content.split('\n')
+    try {
+      const lines = (content || '').split('\n')
 
-    if (isLiveEdit) {
-      const minHeight = Math.max(300, lines.length * (fontSize * 1.5) + 32)
+      if (isLiveEdit) {
+        const minHeight = Math.max(300, lines.length * (fontSize * 1.5) + 32)
+
+        return (
+          <div className="relative">
+            <div 
+              className="absolute left-0 top-0 bottom-0 w-12 bg-[#1E1E3F] text-gray-400 select-none z-10"
+              style={{
+                ...baseTextStyle,
+                minHeight: `${minHeight}px`,
+              }}
+            >
+              {lines.map((_, i) => (
+                <div 
+                  key={i} 
+                  className="text-right pr-2 leading-[1.5]"
+                  style={{ height: `${fontSize * 1.5}px` }}
+                >
+                  {i + 1}
+                </div>
+              ))}
+            </div>
+            <div className="relative">
+              <textarea
+                value={content}
+                onChange={(e) => {
+                  if (side === 'left') {
+                    handleLeftChange(e)
+                  } else {
+                    handleRightChange(e)
+                  }
+                }}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = 'auto'
+                  target.style.height = `${target.scrollHeight}px`
+                }}
+                style={{
+                  ...baseTextStyle,
+                  padding: '1rem 1rem 1rem 3.5rem',
+                  width: '100%',
+                  minHeight: `${minHeight}px`,
+                  height: 'auto',
+                  backgroundColor: 'transparent',
+                  color: 'white',
+                  border: 'none',
+                  overflow: 'hidden',
+                }}
+                className={`focus:outline-none focus:ring-1 focus:ring-[#5e3fde]/50 
+                  ${wrapLines ? 'whitespace-pre-wrap' : 'whitespace-pre'}
+                  bg-gradient-to-b from-[#1E1E3F]/50 to-[#1E1E3F]/30
+                  backdrop-blur-sm transition-all duration-200
+                  hover:bg-[#1E1E3F]/60
+                  font-mono`}
+                spellCheck="false"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
+            </div>
+          </div>
+        )
+      }
 
       return (
         <div className="relative">
           <div 
             className="absolute left-0 top-0 bottom-0 w-12 bg-[#1E1E3F] text-gray-400 select-none z-10"
-            style={{
-              ...baseTextStyle,
-              minHeight: `${minHeight}px`,
-            }}
+            style={baseTextStyle}
           >
             {lines.map((_, i) => (
               <div 
@@ -186,97 +307,47 @@ export function CodeComparisonToolComponent() {
               </div>
             ))}
           </div>
-          <div className="relative">
-            <textarea
-              value={content}
-              onChange={(e) => {
-                if (side === 'left') {
-                  handleLeftChange(e)
-                } else {
-                  handleRightChange(e)
-                }
-              }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement
-                target.style.height = 'auto'
-                target.style.height = `${target.scrollHeight}px`
-              }}
+          <pre className="m-0 p-0 bg-transparent">
+            <code
+              className="hljs"
               style={{
                 ...baseTextStyle,
+                margin: 0,
                 padding: '1rem 1rem 1rem 3.5rem',
-                width: '100%',
-                minHeight: `${minHeight}px`,
-                height: 'auto',
                 backgroundColor: 'transparent',
-                color: 'white',
-                border: 'none',
-                overflow: 'hidden',
+                whiteSpace: wrapLines ? 'pre-wrap' : 'pre',
+                display: 'block',
               }}
-              className={`focus:outline-none focus:ring-1 focus:ring-[#5e3fde]/50 
-                ${wrapLines ? 'whitespace-pre-wrap' : 'whitespace-pre'}
-                bg-gradient-to-b from-[#1E1E3F]/50 to-[#1E1E3F]/30
-                backdrop-blur-sm transition-all duration-200
-                hover:bg-[#1E1E3F]/60
-                font-mono`}
-              spellCheck="false"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-            />
+            >
+              {content}
+            </code>
+          </pre>
+          {/* Add diff highlighting overlay */}
+          <div 
+            className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none"
+            style={{
+              ...baseTextStyle,
+              padding: '1rem 1rem 1rem 3.5rem',
+            }}
+          >
+            {lines.map((_, i) => (
+              <div
+                key={i}
+                style={getLineHighlight(i)}
+                className="h-[1.5em]"
+              />
+            ))}
           </div>
         </div>
       )
+    } catch (error) {
+      console.error('Render error:', error)
+      return (
+        <div className="p-4 text-red-400">
+          Error rendering content. Please check your input.
+        </div>
+      )
     }
-
-    return (
-      <div className="relative">
-        <div 
-          className="absolute left-0 top-0 bottom-0 w-12 bg-[#1E1E3F] text-gray-400 select-none z-10"
-          style={baseTextStyle}
-        >
-          {lines.map((_, i) => (
-            <div 
-              key={i} 
-              className="text-right pr-2 leading-[1.5]"
-              style={{ height: `${fontSize * 1.5}px` }}
-            >
-              {i + 1}
-            </div>
-          ))}
-        </div>
-        <pre className="m-0 p-0 bg-transparent">
-          <code
-            className="hljs"
-            style={{
-              ...baseTextStyle,
-              margin: 0,
-              padding: '1rem 1rem 1rem 3.5rem',
-              backgroundColor: 'transparent',
-              whiteSpace: wrapLines ? 'pre-wrap' : 'pre',
-              display: 'block',
-            }}
-          >
-            {content}
-          </code>
-        </pre>
-        {/* Add diff highlighting overlay */}
-        <div 
-          className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none"
-          style={{
-            ...baseTextStyle,
-            padding: '1rem 1rem 1rem 3.5rem',
-          }}
-        >
-          {lines.map((_, i) => (
-            <div
-              key={i}
-              style={getLineHighlight(i)}
-              className="h-[1.5em]"
-            />
-          ))}
-        </div>
-      </div>
-    )
   }
 
   const showDiff = leftContent.trim() !== '' && rightContent.trim() !== ''
@@ -295,6 +366,36 @@ export function CodeComparisonToolComponent() {
     focus:outline-none focus:ring-2 focus:ring-[#5e3fde]/50
     disabled:opacity-50 disabled:hover:scale-100 disabled:hover:shadow-none
   `
+
+  // Add error boundary for the entire component
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error:', event.error)
+      setHasError(true)
+      toast.error('An error occurred. Please try refreshing the page.')
+    }
+
+    window.addEventListener('error', handleError)
+    return () => window.removeEventListener('error', handleError)
+  }, [])
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-[#5e3fde] rounded-md hover:bg-[#4e35b5]"
+          >
+            Refresh Page
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#0B0B1E] text-white flex flex-col">
