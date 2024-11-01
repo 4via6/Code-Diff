@@ -15,22 +15,34 @@ export function CodeComparisonToolComponent() {
   const [hasError, setHasError] = useState(false)
   const { fontSize, wrapLines, ignoreWhitespace, ignoreCase } = useSettings()
 
-  // Move useEffect outside of conditional
+  // Error handling effect
   useEffect(() => {
-    setHasError(false)
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error:', event.error)
+      setHasError(true)
+      toast.error('An error occurred. Please try refreshing the page.')
+    }
+
+    window.addEventListener('error', handleError)
+    return () => window.removeEventListener('error', handleError)
+  }, [])
+
+  // Content change effect
+  useEffect(() => {
+    try {
+      setHasError(false)
+    } catch (error) {
+      console.error('Error in content change effect:', error)
+    }
   }, [leftContent, rightContent])
 
-  // Move useMemo outside of conditional
+  // Diff calculation
   const differences = useMemo(() => {
-    if (hasError || !leftContent || !rightContent) return []
-
     try {
+      if (!leftContent || !rightContent) return []
+
       const normalizeText = (text: string = '') => {
-        try {
-          return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-        } catch {
-          return text
-        }
+        return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
       }
 
       let leftText = normalizeText(leftContent)
@@ -38,13 +50,9 @@ export function CodeComparisonToolComponent() {
 
       if (ignoreWhitespace) {
         const trimLines = (text: string) => {
-          try {
-            return text.split('\n')
-              .map(line => line?.trim() || '')
-              .join('\n')
-          } catch {
-            return text
-          }
+          return text.split('\n')
+            .map(line => line?.trim() || '')
+            .join('\n')
         }
         leftText = trimLines(leftText)
         rightText = trimLines(rightText)
@@ -68,58 +76,38 @@ export function CodeComparisonToolComponent() {
       console.error('Diff calculation error:', error)
       return []
     }
-  }, [leftContent, rightContent, ignoreWhitespace, ignoreCase, hasError])
+  }, [leftContent, rightContent, ignoreWhitespace, ignoreCase])
 
-  const handleLeftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    try {
-      setLeftContent(e.target.value)
-      setHasError(false)
-    } catch (error) {
-      console.error('Error updating left content:', error)
-      toast.error('Error processing content')
-      setHasError(true)
-    }
-  }
-
-  const handleRightChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    try {
-      setRightContent(e.target.value)
-      setHasError(false)
-    } catch (error) {
-      console.error('Error updating right content:', error)
-      toast.error('Error processing content')
-      setHasError(true)
-    }
-  }
-
-  // Render error state
-  if (hasError) {
-    return (
-      <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
-        <div className="text-center p-4">
-          <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
-          <p className="mb-4 text-gray-400">There was an error processing the code comparison</p>
-          <div className="space-x-4">
-            <button 
-              onClick={() => {
-                setLeftContent('')
-                setRightContent('')
-                setHasError(false)
-              }}
-              className="px-4 py-2 bg-[#2d2d5b] rounded-md hover:bg-[#3d3d6b] transition-colors"
-            >
-              Clear All
-            </button>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-[#5e3fde] rounded-md hover:bg-[#4e35b5] transition-colors"
-            >
-              Refresh Page
-            </button>
-          </div>
+  // Error UI Component
+  const ErrorDisplay = () => (
+    <div className="min-h-screen bg-[#0B0B1E] text-white flex items-center justify-center">
+      <div className="text-center p-4">
+        <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+        <p className="mb-4 text-gray-400">There was an error processing the code comparison</p>
+        <div className="space-x-4">
+          <button 
+            onClick={() => {
+              setLeftContent('')
+              setRightContent('')
+              setHasError(false)
+            }}
+            className="px-4 py-2 bg-[#2d2d5b] rounded-md hover:bg-[#3d3d6b] transition-colors"
+          >
+            Clear All
+          </button>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-[#5e3fde] rounded-md hover:bg-[#4e35b5] transition-colors"
+          >
+            Refresh Page
+          </button>
         </div>
       </div>
-    )
+    </div>
+  )
+
+  if (hasError) {
+    return <ErrorDisplay />
   }
 
   // Update the handlePaste function
