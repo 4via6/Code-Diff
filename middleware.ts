@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
     
     // Return 301 permanent redirect
     return NextResponse.redirect(httpsUrl, {
-      statusCode: 301,
+      status: 301,
       headers: {
         'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
       }
