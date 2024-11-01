@@ -8,8 +8,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies
+# Install dependencies and type definitions
 RUN npm ci
+RUN npm install --save-dev @types/diff
 
 # Rebuild the source code only when needed
 FROM base AS builder
