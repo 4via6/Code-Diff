@@ -124,7 +124,7 @@ export function CodeComparisonToolComponent() {
           document.execCommand('copy')
           setCopyStatus(prev => ({ ...prev, [side]: true }))
           toast.success('Content copied to clipboard')
-        } catch (err) {
+        } catch {
           toast.error('Failed to copy. Please use Ctrl+C/Cmd+C')
         }
         document.body.removeChild(textArea)
@@ -133,9 +133,8 @@ export function CodeComparisonToolComponent() {
       setTimeout(() => {
         setCopyStatus(prev => ({ ...prev, [side]: false }))
       }, 2000)
-    } catch (err) {
-      console.error('Copy failed:', err)
-      // More user-friendly error message
+    } catch {
+      console.error('Copy failed')
       toast.error('Unable to copy automatically. Please try selecting the text manually')
     }
   }
@@ -156,7 +155,7 @@ export function CodeComparisonToolComponent() {
         try {
           document.execCommand('paste')
           pastedText = textArea.value
-        } catch (err) {
+        } catch {
           toast.error('Please use Ctrl+V/Cmd+V to paste')
         }
         document.body.removeChild(textArea)
@@ -172,8 +171,8 @@ export function CodeComparisonToolComponent() {
       } else {
         toast.error('No content in clipboard')
       }
-    } catch (err) {
-      console.error('Paste failed:', err)
+    } catch {
+      console.error('Paste failed')
       toast.error('Please try pasting manually using Ctrl+V/Cmd+V')
     }
   }
