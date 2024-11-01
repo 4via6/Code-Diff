@@ -66,32 +66,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <head>
-        <link rel="canonical" href="https://code.arson.me" />
-        <meta name="theme-color" content="#0B0B1E" />
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body>
         <SettingsProvider>
           {children}
-          <Toaster 
-            position="top-center"
-            toastOptions={{
-              style: {
-                background: '#1a1a2e',
-                border: '1px solid rgba(94, 63, 222, 0.2)',
-                color: 'white',
-              },
-            }}
-          />
+          <Toaster />
         </SettingsProvider>
       </body>
     </html>
-  );
+  )
 }

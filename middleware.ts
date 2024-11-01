@@ -4,37 +4,24 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   // Get the hostname
   const hostname = request.headers.get('host') || ''
+  const isHttps = request.headers.get('x-forwarded-proto')?.includes('https')
 
-  // Only redirect if it's our specific domain
-  const isDomain = hostname === 'code.arson.me'
-  
-  // Check if the request is HTTP
-  if (!request.headers.get('x-forwarded-proto')?.includes('https') && isDomain) {
-    // Create the HTTPS URL
-    const httpsUrl = `https://code.arson.me${request.nextUrl.pathname}${request.nextUrl.search}`
-    
-    // Return 301 permanent redirect
-    return NextResponse.redirect(httpsUrl, {
-      status: 301,
-      headers: {
-        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
-      }
-    })
+  // Check if we need to redirect to HTTPS
+  if (!isHttps && hostname === 'code.arson.me') {
+    const redirectUrl = `https://code.arson.me${request.nextUrl.pathname}${request.nextUrl.search}`
+    return NextResponse.redirect(redirectUrl, 301)
   }
 
+  // For all other cases, continue with the request
   return NextResponse.next()
 }
 
-// Configure which paths the middleware runs on
+// Only run middleware on specific paths
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for:
-     * - API routes
-     * - Static files
-     * - Assets
-     * - Images
+     * Match all paths except static files and API routes
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 } 

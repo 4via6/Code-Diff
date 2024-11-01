@@ -1,5 +1,5 @@
-import { CodeComparisonToolComponent } from "@/components/code-comparison-tool"
+import { CodeComparisonToolComponent } from '@/components/code-comparison-tool'
 
-export default function Page() {
+export default function Home() {
   return <CodeComparisonToolComponent />
 }
