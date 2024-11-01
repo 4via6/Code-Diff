@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-diff
+  namespace: k3s
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: code-diff
+  template:
+    metadata:
+      labels:
+        app: code-diff
+    spec:
+      containers:
+      - name: code-diff
+        image: firstfinger/code-diff:latest  # This will be updated by CI/CD
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000  # Next.js default port
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      imagePullSecrets:
+      - name: my-registry-secret

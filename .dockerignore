@@ -1,0 +1,58 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies
+node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Next.js build output
+.next
+out
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Development files
+README.md
+CHANGELOG.md
+docker-compose.yml
+docker-compose.*.yml
+.dockerignore
+.editorconfig
+
+# IDE
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Temp files
+*.log
+*.tmp
+.cache
+
+# Build files
+dist
+build
+
+# Debug files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log* 
